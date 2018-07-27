@@ -56,7 +56,7 @@ output$hist1 <- renderPlot({
 output$stats <- renderPrint({
               #  print(sort(Data(), decreasing = F)),
   
-                print(sort(Data())
+                print(sort(Data()))
 
                 str(Data())
                  })
