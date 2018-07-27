@@ -1,0 +1,57 @@
+# Packages
+install.packages("topicmodels")
+install.packages("tidytext")
+install.packages("tidyverse")
+install.packages("rvest")
+
+library(tidytext)
+library(topicmodels)
+library(tidyverse)
+library(rvest)
+
+
+scrape_lyrics_url <- function(url){
+  url <- read_html(url)
+  df <- tibble(text =url %>% html_nodes(".songs-table") %>% html_nodes("a") %>% html_attr("href"), 
+               name = url %>% html_nodes("h1") %>% html_text())
+  return(df)
+}
+
+
+scrape_lyrics_page <- function(url){
+  url <- read_html(url)
+  df <- tibble(text = url %>% html_nodes("#lyrics-body-text") %>% html_text(), 
+               band = url %>% html_nodes("h2") %>% html_nodes("a") %>% html_text(), 
+               song = url %>% html_nodes("h1") %>% html_text()) 
+  df$song <- gsub(pattern = " Lyrics", "", df$song)
+  return(df)
+}
+
+song_index <- c(#"http://www.metrolyrics.com/kreator-lyrics.html", 
+                # "http://www.metrolyrics.com/kreator-alpage-2.html", 
+                # "http://www.metrolyrics.com/kreator-alpage-3.html",
+                "http://www.metrolyrics.com/iron-maiden-lyrics.html", 
+                "http://www.metrolyrics.com/iron-maiden-alpage-2.html", 
+                "http://www.metrolyrics.com/iron-maiden-alpage-3.html",
+                "http://www.metrolyrics.com/black-sabbath-lyrics.html",
+                "http://www.metrolyrics.com/black-sabbath-alpage-2.html",
+                "http://www.metrolyrics.com/black-sabbath-alpage-3.html")
+                # "http://www.metrolyrics.com/motrhead-lyrics.html",
+                # "http://www.metrolyrics.com/motrhead-alpage-2.html", 
+                # "http://www.metrolyrics.com/motrhead-alpage-3.html",
+                # "http://www.metrolyrics.com/pantera-lyrics.html", 
+                # "http://www.metrolyrics.com/pantera-alpage-2.html")
+
+#http://www.metrolyrics.com/black-sabbath-lyrics.html
+#http://www.metrolyrics.com/black-sabbath-alpage-2.html
+#http://www.metrolyrics.com/black-sabbath-alpage-3.html
+
+
+url_list <- map_df(song_index, scrape_lyrics_url)
+
+
+data_m <- map_df(.x = url_list$text, .f = scrape_lyrics_page)
+dim(data_m)
+View(data_m)
+
+class(data_m)
