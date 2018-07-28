@@ -1,0 +1,127 @@
+#libraries ----
+library("shiny")
+library("shinythemes")
+library("readr")
+library("tidyverse")
+library("ggthemes")
+require("gridExtra")
+
+#loading dataset ----
+energy <- read_csv("/Users/Joerg/Desktop/Ubiqum/Shiny/Energy/energy_shiny_grouped_month_year.csv")
+energy[3:7] <- round(energy[3:7]/1000,2)
+
+#changing the theme ----
+theme_black = function(base_size = 15, base_family = "") {
+  
+  theme_grey(base_size = base_size, base_family = base_family) %+replace%
+    
+    theme(
+      # Specify axis options
+      
+    #  plot.title = element_text(margin = ggplot2::margin(t = 10)),
+      axis.line = element_blank(),  
+      axis.text.x = element_text(size = base_size*0.9, color = "white", lineheight = 0.9),  
+      axis.text.y = element_text(size = base_size*0.9, color = "white", lineheight = 0.9),  
+      axis.ticks = element_line(color = "white", size  =  0.4),  
+      axis.title.x = element_text(size = base_size, color = "white", margin = ggplot2::margin(t = 10, r = 10, b= 0, l = 0)),  
+      axis.title.y = element_text(size = base_size, color = "white", angle = 90, margin =ggplot2::margin(0, 10, 0, 0)),  
+      axis.ticks.length = unit(0.3, "lines"),   
+    
+      # Specify legend options
+      legend.background = element_rect(color = NA, fill = "#303030"),  
+      legend.key = element_rect(color = "white",  fill = "#303030"),  
+      legend.key.size = unit(1.2, "lines"),  
+      legend.key.height = NULL,  
+      legend.key.width = NULL,      
+      legend.text = element_text(size = base_size*0.8, color = "white"),  
+      legend.title = element_text(size = base_size*0.8, face = "bold", hjust = 0, color = "white"),  
+      legend.position = "right",  
+      legend.text.align = NULL,  
+      legend.title.align = NULL,  
+      legend.direction = "vertical",  
+      legend.box = NULL, 
+      # Specify panel options
+      panel.background = element_rect(fill = "#303030", color  =  NA),  
+      panel.border = element_rect(fill = NA, color = "grey35"),  
+      panel.grid.major = element_line(color = "grey35"),  
+      panel.grid.minor = element_blank(),  
+      panel.margin = unit(0.5, "lines"),   
+      # Specify facetting options
+      strip.background = element_rect(fill = "grey30", color = "grey10"),  
+      strip.text.x = element_text(size = base_size*0.8, color = "white"),  
+      strip.text.y = element_text(size = base_size*0.8, color = "white",angle = -90),  
+      # Specify plot options
+      plot.background = element_rect(color = "#303030", fill = "#303030"),  
+      plot.title = element_text(size = base_size*1.2, color = "white"),  
+      plot.margin = unit(rep(1, 4), "lines")
+      
+    )
+  
+}
+
+
+#user interface ----
+ui <- fluidPage(
+  
+  theme = shinytheme("darkly"),
+  
+  #adding a title to the app
+  titlePanel("Energy Consumption"),
+  
+  #sidebar
+  sidebarPanel(
+    radioButtons(
+      inputId = "rb_energy_type",
+      label = "Submeter:",
+      choices = list(
+        "Global Active Power" = "Global_active_power",
+        "Kitchen" = "Sub_metering_1",
+        "Laundry" = "Sub_metering_2",
+        "Water Heater & Air Conditioning" = "Sub_metering_3",
+        "Missing Energy" = "Missing_energy"),
+      selected = NULL,
+      inline = FALSE,
+      width = "100%"
+    ),
+    
+    checkboxGroupInput(
+      inputId = "cb_years",
+      label = "Year:",
+      choices = unique(c(as.character(energy$Year))),
+      selected = "2007"
+    )
+  ),
+  
+  mainPanel(plotOutput("plot1"),
+            verbatimTextOutput("stats"))
+  
+)
+
+#server ----
+server <- function(input, output) {
+  
+  output$plot1 <- renderPlot({
+    energy$Month <- as.numeric(energy$Month)
+    energy$Year <- as.factor(energy$Year)
+    
+    ggplot() +
+      geom_line(data = energy[which(energy$Year %in% input$cb_years), ],
+                aes(x = Month, y = get(input$rb_energy_type), color = Year)) +
+      ylab("Energy Consumed (kWh)") + xlab("Month") +
+      ggtitle("Energy Consumed") +
+      scale_x_continuous(breaks = c(1:12)) + theme_black() +
+      scale_color_manual(
+        name = "Legend",
+        values = c(
+          "2007" = "#ff66cc",
+          "2008" = "#f47835",
+          "2009" = "#66ccff",
+          "2010" = "#ccff66"
+        )
+      ) +
+      theme(plot.title = element_text(hjust = 0.5, vjust = 4)) 
+  })
+}
+
+#making it work
+shinyApp(ui = ui, server = server)
