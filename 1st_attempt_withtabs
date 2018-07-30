@@ -1,0 +1,73 @@
+#
+# This is a Shiny web application. You can run the application by clicking
+# the 'Run App' button above.
+#
+# Find out more about building applications with Shiny here:
+#
+#    http://shiny.rstudio.com/
+#
+
+# This is a first attempt of using a reactive in combination with ggplot. To keep things simple,
+# I am using the tried & tested "iris" data set
+
+library(shiny)
+library(tidyverse)
+
+data(iris)
+
+ui <- fluidPage(
+  titlePanel("Hello World!"),
+  sidebarPanel(
+    selectInput(inputId = "col", 
+                label = "Choose attribute",
+                choices = c("Sepal Length" = "Sepal.Length",
+                            "Sepal Width" = "Sepal.Width",
+                            "Petal Length" = "Petal.Length",
+                            "Petal Width" = "Petal.Width"
+                ),
+                selected = names(iris)[1])
+    # here goes another selectinput for desc/asc
+  ),  
+  
+  mainPanel(
+    tabsetPanel(
+    tabPanel("Plot", plotOutput("hist1")),
+    tabPanel("Table (ordered by selected attribute)", tableOutput("order")),
+    tabPanel("Structure", verbatimTextOutput("stats"))           
+                
+    )
+)
+
+)
+
+# Define server logic required to draw a histogram
+server <- function(input, output) {
+  
+  # Creating an interactive object reading from input$col
+  Data <- reactive({
+    df <- iris[input$col]
+  })
+  
+  output$hist1 <- renderPlot({
+    ggplot(Data(), aes_string(x = input$col)) + stat_count(binwidth = 2) + ylab(input$col) +
+      ggtitle("Histogram") 
+  })
+  
+  # output$hist2 <- renderPlot({
+  #                 ggplot(Data(), aes_string(x = input$col)) + geom_histogram(binwidth = 2)
+  #                 })
+  
+  output$order <- renderTable({
+    
+    iris[order(-iris[input$col]),]
+  })
+  
+  output$stats <- renderPrint({
+    str(Data()),
+    print(input$col)
+  })
+  
+}
+
+# Run the application 
+shinyApp(ui = ui, server = server)
