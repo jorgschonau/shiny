@@ -1,0 +1,260 @@
+#libraries ----
+library("shiny")
+library("shinythemes")
+library("readr")
+library("ggplot2")
+library("ggthemes")
+library("lubridate")
+require("gridExtra")
+
+# changing the theme ----
+theme_black = function(base_size = 15, base_family = "") {
+  
+  theme_grey(base_size = base_size, base_family = base_family) %+replace%
+    
+    theme(
+      # Specify axis options
+      #  plot.title = element_text(margin = ggplot2::margin(t = 10)),
+      axis.line = element_blank(),  
+      axis.text.x = element_text(size = base_size*0.9, color = "white", lineheight = 0.9),  
+      axis.text.y = element_text(size = base_size*0.9, color = "white", lineheight = 0.9),  
+      axis.ticks = element_line(color = "white", size  =  0.4),  
+      axis.title.x = element_text(size = base_size, color = "white", margin = ggplot2::margin(t = 10, r = 10, b= 0, l = 0)),  
+      axis.title.y = element_text(size = base_size, color = "white", angle = 90, margin =ggplot2::margin(0, 10, 0, 0)),  
+      axis.ticks.length = unit(0.3, "lines"),   
+      
+      # Specify legend options
+      legend.background = element_rect(color = NA, fill = "#303030"),  
+      legend.key = element_rect(color = "white",  fill = "#303030"),  
+      legend.key.size = unit(1.2, "lines"),  
+      legend.key.height = NULL,  
+      legend.key.width = NULL,      
+      legend.text = element_text(size = base_size*0.8, color = "white"),  
+      legend.title = element_text(size = base_size*0.8, face = "bold", hjust = 0, color = "white"),  
+      legend.position = "right",  
+      legend.text.align = NULL,  
+      legend.title.align = NULL,  
+      legend.direction = "vertical",  
+      legend.box = NULL, 
+      # Specify panel options
+      panel.background = element_rect(fill = "#303030", color  =  NA),  
+      panel.border = element_rect(fill = NA, color = "grey35"),  
+      panel.grid.major = element_line(color = "grey35"),  
+      panel.grid.minor = element_blank(),  
+      panel.margin = unit(0.5, "lines"),   
+      # Specify facetting options
+      strip.background = element_rect(fill = "grey30", color = "grey10"),  
+      strip.text.x = element_text(size = base_size*0.8, color = "white"),  
+      strip.text.y = element_text(size = base_size*0.8, color = "white",angle = -90),  
+      # Specify plot options
+      plot.background = element_rect(color = "#303030", fill = "#303030"),  
+      plot.title = element_text(size = base_size*1.3, color = "white"),  
+      plot.margin = unit(rep(1, 4), "lines")
+    )
+}
+
+#user interface ----
+ui <- fluidPage(
+  theme = shinytheme("darkly"),
+
+  #app's title
+  titlePanel(p("Energy Consumption", align = "center")),
+  
+  #sidebar
+  sidebarPanel(
+    radioButtons(
+      inputId = "timeframe",
+      label = "Time frame:",
+      choices = list(
+        "Year" = "year",
+        "Season" = "season",
+        "Month" = "month",
+        "Week" = "week"
+      ),
+      selected = "week",
+      inline = FALSE,
+      width = "100%"
+    ),
+    
+    sliderInput(
+      inputId = "years",
+      label = "Years to plot",
+      min = 2007,
+      max = 2010,
+      value = c(2007, 2010)
+    ),
+    
+    checkboxGroupInput(
+      inputId = "energysource",
+      label = "Energy sources:",
+      choices = list(
+        "Global Active Power" = "GlobalActivePower",
+        "Kitchen" = "HVAC",
+        "Laundry" = "Laundry",
+        "Water Heater & Air Conditioning" = "Kitchen",
+        "Missing Energy" = "Missing"
+      ),
+      selected = c(
+        "Global Active Power" = "GlobalActivePower",
+        "Kitchen" = "HVAC",
+        "Laundry" = "Laundry",
+        "Water Heater & Air Conditioning" = "Kitchen",
+        "Missing Energy" = "Missing"
+      )
+    )
+  ),
+  
+  mainPanel(
+    tabsetPanel(
+      tabPanel("Plot", plotOutput("plot1")),
+      tabPanel("Data in Table", tableOutput("table")),
+      tabPanel("Summary", verbatimTextOutput("summary"))
+    )
+  )
+
+)
+
+#server ----
+
+setwd("/Users/Joerg/Desktop/Ubiqum/Shiny/Energy")
+
+server <- function(input, output) {
+  
+  #loading dataset ----
+  #opening all the df at once
+  energy <- reactive({
+    
+    energy_df <- read.csv(paste0("energy_shiny_grouped_", input$timeframe, ".csv"), stringsAsFactors=FALSE, col.names = c(
+      "GlobalActivePower",
+      "HVAC",
+      "Laundry",
+      "Kitchen",
+      "Missing",
+      "Date"))
+    
+    energy_df$Date <- as.POSIXct(energy_df$Date, "%Y-%m-%d", tz = "CET")
+    energy_df
+    })
+
+  output$plot1 <- renderPlot({
+    
+    validate(need(!is.null(input$energysource), 
+                  "Please select at least one energy source"))
+    
+    starting_date <- as.POSIXct(paste(input$years[1],"01","01", sep = "-"))
+    end_date <- as.POSIXct(paste(input$years[2]+1,"01","01", sep = "-"))
+    
+  # plot ----
+    my_plot <- ggplot() +
+      ylab("Energy Consumed (W/hour)") + xlab("Year") +
+      ggtitle("Energy Consumed") + theme_black() +
+      theme(plot.title = element_text(hjust = 0.5)) +
+      scale_color_manual(
+        name = "Legend",
+        values = c(
+          "GlobalActivePower" = "#ff66cc",
+          "HVAC" = "#f47835",
+          "Laundry" = "#66ccff",
+          "Kitchen" = "#ccff66",
+          "Missing" = "#f9d62e"
+        )) + xlim(starting_date, end_date)
+    
+    
+    if("GlobalActivePower" %in% input$energysource){
+      my_plot <- my_plot + geom_line(data = energy(),
+                                     aes(
+                                       x = as.POSIXct(Date),
+                                       y = GlobalActivePower,
+                                       color = "GlobalActivePower"
+                                     ))
+    }
+    
+    if("HVAC" %in% input$energysource){
+      my_plot <- my_plot + geom_line(data = energy(),
+                                     aes(
+                                       x = as.POSIXct(Date),
+                                       y = HVAC,
+                                       color = "HVAC"
+                                     ))
+    } 
+    
+    if("Laundry" %in% input$energysource){
+      my_plot <- my_plot + geom_line(data = energy(),
+                                     aes(
+                                       x = as.POSIXct(Date),
+                                       y = Laundry,
+                                       color = "Laundry"
+                                     ))
+    } 
+    
+    if("Kitchen" %in% input$energysource){
+      my_plot <- my_plot + geom_line(data = energy(),
+                                     aes(
+                                       x = as.POSIXct(Date),
+                                       y = Kitchen,
+                                       color = "Kitchen"
+                                     ))
+    }  
+    
+    if("Missing" %in% input$energysource){
+      my_plot <- my_plot + geom_line(data = energy(),
+                                     aes(
+                                       x = as.POSIXct(Date),
+                                       y = Missing,
+                                       color = "Missing"
+                                     ))
+    }  
+    
+    return(my_plot)
+  })
+  
+  output$table <- renderTable({
+    
+    starting_date <- as.POSIXct(paste(input$years[1],"01","01", sep = "-"))
+    end_date <- as.POSIXct(paste(input$years[2]+1,"01","01", sep = "-"))
+
+    energy_table <- read.csv(paste0("energy_shiny_grouped_", input$timeframe, ".csv"), stringsAsFactors=FALSE, col.names = c(
+      "GlobalActivePower",
+      "HVAC",
+      "Laundry",
+      "Kitchen",
+      "Missing",
+      "Date"))
+
+    energy_table$Date <- as.POSIXct(energy_table$Date, "%Y-%m-%d", tz = "CET")
+    energy_table <- energy_table %>% dplyr::filter(Date >= starting_date & Date < end_date)
+    energy_table <- energy_table[order(energy_table$Date),] # not sure whether necessary
+    energy_table$Date <- as.character(energy_table$Date) # needs to be character, otherwise won't be rendered properly
+    energy_table
+  })
+  
+  output$summary <- renderText({
+    
+    starting_date <- as.Date(paste(input$years[1],"01","01", sep = "-"))
+    end_date <- as.Date(paste(input$years[2]+1,"01","01", sep = "-"))-1
+    end_date_text <- as.Date(paste(input$years[2]+1,"01","01", sep = "-"))-1
+    
+    energy_table <- read.csv(paste0("energy_shiny_grouped_", input$timeframe, ".csv"), stringsAsFactors=FALSE, col.names = c(
+      "GlobalActivePower",
+      "HVAC",
+      "Laundry",
+      "Kitchen",
+      "Missing",
+      "Date"))
+    
+    energy_table$Date <- as.POSIXct(energy_table$Date, "%Y-%m-%d", tz = "CET")
+    energy_table <- energy_table %>% dplyr::filter(Date >= starting_date & Date < end_date)
+    
+    GAP_sum <- sum(energy_table$GlobalActivePower)
+    
+    print (paste0("The time interval you've chosen: ", input$timeframe,"ly\n\n",
+                  "Chosen start date: ", starting_date, "\n",
+                  "Chosen end date: ", end_date_text, "\n\n",
+                  "The total consumption over this time frame is: ", format(GAP_sum, big.mark=","), " Watts or ",
+                  round(GAP_sum/1000,2), " kilowatts"))  
+                  # (still have to figure out how to get this from this #$@&%*! reactive object ...)"))
+  })
+}
+
+# making it work
+shinyApp(ui = ui, server = server)
