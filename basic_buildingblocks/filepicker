@@ -1,0 +1,56 @@
+#libraries ----
+library("shiny")
+library("readr")
+
+# user interface ----
+ui <- fluidPage(
+  
+  # app's title
+  titlePanel(p("Table Visualisation", align = "center")),
+  
+  # sidebar
+   sidebarPanel(
+      fileInput("file", "Choose CSV File NOW!", multiple = F,
+                accept = c(
+                  "text/csv",
+                  "text/comma-separated-values, text/plain",
+                  ".csv")
+      ),
+      # horizontal line ----
+      tags$hr(),
+      # checkbox for header
+      checkboxInput("header", "Header", TRUE)
+    ),
+  
+  # main panel
+  mainPanel(
+    tabsetPanel(
+      tabPanel("Data in Table", tableOutput("table")),
+      tabPanel("Summary", verbatimTextOutput("summary"))
+    )
+  )
+  
+)
+# server ----
+
+setwd("/Users/Joerg/Desktop/Ubiqum/Shiny/Energy")
+
+server <- function(input, output) {
+    output$table <- renderTable({
+    inFile <- input$file
+    if (is.null(inFile))
+      return(NULL)
+    read.csv(inFile$datapath, header = input$header)
+  })
+  
+  output$summary <- renderPrint({
+    inFile <- input$file
+    if (is.null(inFile))
+      return(NULL)
+    str(read.csv(inFile$datapath, header = input$header))
+    }) 
+  
+}
+
+# making it work
+shinyApp(ui = ui, server = server)
