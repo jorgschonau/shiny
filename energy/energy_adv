@@ -81,7 +81,8 @@ ui <- fluidPage(
       label = "Years to plot",
       min = 2007,
       max = 2010,
-      value = c(2007, 2010)
+      value = c(2007, 2010),
+      sep = ""
     ),
     
     checkboxGroupInput(
