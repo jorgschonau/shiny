@@ -1,11 +1,3 @@
-#
-# This is a Shiny web application. You can run the application by clicking
-# the 'Run App' button above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
 
 #libraries ----
 library("shiny")
@@ -65,11 +57,11 @@ theme_black = function(base_size = 15, base_family = "") {
 #user interface ----
 ui <- fluidPage(
   theme = shinytheme("darkly"),
-  
-  #app's title
+
+  # app title
   titlePanel(p("Energy Consumption", align = "center")),
   
-  #sidebar
+  # sidebar
   sidebarPanel(
     radioButtons(
       inputId = "timeframe",
@@ -91,7 +83,6 @@ ui <- fluidPage(
       min = 2007,
       max = 2010,
       value = c(2007, 2010),
-      #     animate = T,
       sep = ""
     ),
     
@@ -123,7 +114,7 @@ ui <- fluidPage(
       tabPanel("Summary", verbatimTextOutput("summary"))
     )
   )
-  
+
 )
 
 #### server ####
@@ -138,17 +129,17 @@ energy_df <- read.csv("https://s3.eu-central-1.amazonaws.com/shiny-electricity/e
                         "Date"))
 
 server <- function(input, output) {
-  
+
   
   energy <- reactive({
     
     energy_df
     energy_df$Date <- as.POSIXct(energy_df$Date, "%Y-%m-%d", tz = "CET")
     energy_df_reac <- energy_df %>% dplyr::group_by(Date= cut(Date, input$timeframe)) %>%
-      summarise_all(funs(sum))   
+    summarise_all(funs(sum))   
     
-  })
-  
+    })
+
   output$plot1 <- renderPlot({
     
     validate(need(!is.null(input$energysource), 
@@ -157,7 +148,7 @@ server <- function(input, output) {
     starting_date <- as.POSIXct(paste(input$years[1],"01","01", sep = "-"))
     end_date <- as.POSIXct(paste(input$years[2]+1,"01","01", sep = "-"))
     
-    # plot ----
+  # plot ----
     my_plot <- ggplot() +
       ylab("Energy Consumed (kW/hour)") + xlab("Year") +
       ggtitle("Energy Consumed") + theme_black() +
@@ -172,7 +163,7 @@ server <- function(input, output) {
           "Missing" = "#f9d62e"
         )) + xlim(starting_date, end_date) + 
       scale_y_continuous(labels=function(x) format(x, big.mark = ",", scientific = FALSE))
-    
+
     if("GlobalActivePower" %in% input$energysource){
       my_plot <- my_plot + geom_line(data = energy(),
                                      aes(
@@ -223,18 +214,20 @@ server <- function(input, output) {
   
   output$table <- renderTable({
     
-    starting_date <- as.POSIXct(paste(input$years[1],"01","01", sep = "-"))
-    end_date <- as.POSIXct(paste(input$years[2]+1,"01","01", sep = "-"))
-    energy_table <- energy_df
-    energy_table$Date <- as.POSIXct(energy_table$Date, "%Y-%m-%d", tz = "CET")
-    energy_table <- energy_table %>% dplyr::group_by(Date= cut(Date, input$timeframe)) %>%
-      summarise_all(funs(sum))
-    energy_table$Date <- as.POSIXct(energy_table$Date, "%Y-%m-%d", tz = "CET")
-    energy_table <- energy_table %>% dplyr::filter(Date >= starting_date & Date < end_date)
-    energy_table <- energy_table[order(energy_table$Date),] # not sure whether necessary
-    energy_table$Date <- as.character(energy_table$Date) # needs to be character, otherwise won't be rendered properly
-    energy_table <- energy_table %>% select(-Date,everything())
-    energy_table
+   starting_date <- as.POSIXct(paste(input$years[1],"01","01", sep = "-"))
+   end_date <- as.POSIXct(paste(input$years[2]+1,"01","01", sep = "-"))
+   energy_table <- energy_df
+   energy_table$Date <- as.POSIXct(energy_table$Date, "%Y-%m-%d", tz = "CET")
+   energy_table <- energy_table %>% dplyr::group_by(Date= cut(Date, input$timeframe)) %>%
+   summarise_all(funs(sum))
+   energy_table$Date <- as.POSIXct(energy_table$Date, "%Y-%m-%d", tz = "CET")
+   energy_table <- energy_table %>% dplyr::filter(Date >= starting_date & Date < end_date)
+   energy_table <- energy_table[order(energy_table$Date),] # not sure whether necessary
+   energy_table$Date <- as.character(energy_table$Date) # needs to be character, otherwise won't be rendered properly
+   energy_table <- energy_table %>% select(-Date,everything())
+   energy_table <- energy_table  %>% mutate_each(funs(round(.,2)), -Date)
+   energy_table[,1:5] <- sapply(energy_table[,1:5], FUN=function(x) prettyNum(x, big.mark=","))
+   energy_table
   })
   
   output$summary <- renderText({
@@ -245,39 +238,27 @@ server <- function(input, output) {
     energy_summary <- energy_df
     energy_summary$Date <- as.POSIXct(energy_summary$Date, "%Y-%m-%d", tz = "CET")
     energy_summary <- energy_summary %>% dplyr::group_by(Date= cut(Date, input$timeframe)) %>%
-      summarise_all(funs(sum))
+    summarise_all(funs(sum))
     energy_summary$Date <- as.POSIXct(energy_summary$Date, "%Y-%m-%d", tz = "CET")
     energy_summary <- energy_summary %>% dplyr::filter(Date >= starting_date & Date < end_date)
     GAP_sum <- sum(energy_summary$GlobalActivePower)
-    
+   
     print (paste0("The time interval you've chosen: ", input$timeframe,"ly\n\n",
                   "Chosen start date: ", starting_date, "\n",
                   "Chosen end date: ", end_date_text, "\n\n",
                   "The total consumption over this time frame is: ", format(round(GAP_sum,2), big.mark=","), " kilowatts", "\n", "or ",
                   format(round(GAP_sum/1000,2),big.mark=","), " megawatts.", "\n",
-                  "The average consumption per ", input$timeframe, " is ",format(round(GAP_sum/nrow(energy_summary),2), big.mark=","), " kW/h."))
+                   "The average consumption per ", input$timeframe, " is ",format(round(GAP_sum/nrow(energy_summary),2), big.mark=","), " kW/h."))
   })
   
-  output$download <- downloadHandler(
+ output$download <- downloadHandler(
     filename = function() {
       paste0("energy_", input$timeframe, "ly", "_", Sys.Date(), ".csv")
     },
     content = function(file){
       
-      starting_date <- as.POSIXct(paste(input$years[1],"01","01", sep = "-"))
-      end_date <- as.POSIXct(paste(input$years[2]+1,"01","01", sep = "-"))
-      energy_table <- energy_df
-      energy_table$Date <- as.POSIXct(energy_table$Date, "%Y-%m-%d", tz = "CET")
-      energy_table <- energy_table %>% dplyr::group_by(Date= cut(Date, input$timeframe)) %>%
-        summarise_all(funs(sum))
-      energy_table$Date <- as.POSIXct(energy_table$Date, "%Y-%m-%d", tz = "CET")
-      energy_table <- energy_table %>% dplyr::filter(Date >= starting_date & Date < end_date)
-      energy_table <- energy_table[order(energy_table$Date),] # not sure whether necessary
-      energy_table$Date <- as.character(energy_table$Date) # needs to be character, otherwise won't be rendered properly
-      energy_table <- energy_table %>% select(-Date,everything())
-      energy_table
-
-      write.csv(energy_table, file, row.names = F)
+    energy_table$Date <- as.POSIXct(energy_table$Date, "%Y-%m-%d", tz = "CET")
+    write.csv(energy_table, file, row.names = F)
     }
   )
 } 
