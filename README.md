@@ -4,7 +4,7 @@ Here go all things related to Shiny - the R package for creating interactive web
 
 Shiny Apps I created so far:
 
-1. A dashboard showing the sales amounts and revenues of several sales reps of an imaginary company https://jschoenau.shinyapps.io/Kantox_Dasboard/.
+1. A dashboard showing the sales and revenues data of several sales reps within an imaginary company https://jschoenau.shinyapps.io/Kantox_Dasboard/.
 
 Preview:
 <kbd>
