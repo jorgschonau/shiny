@@ -13,4 +13,5 @@ Preview:
 2. Overview of energy consumed in a household over several years: https://jschoenau.shinyapps.io/energy_advanced_app2/.
 
 Preview:
-![energy shiny app preview](https://github.com/jorgschonau/shiny/blob/master/images/preview_energy_shinyapp.png)
+<kbd>
+![energy shiny app preview](https://github.com/jorgschonau/shiny/blob/master/images/preview_energy_shinyapp.png)</kbd>
