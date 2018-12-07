@@ -1,0 +1,356 @@
+# libraries 
+library(shiny)
+library(shinythemes)
+library(readr)
+library(lubridate)
+library(tidyverse)
+library(gridExtra)
+library(zoo)
+library(rowr)
+library(stringr)
+library(reshape2)
+library(DescTools)
+
+setwd("~/")
+
+# user interface
+ui <- fluidPage(
+      theme = shinytheme("sandstone"),
+      # app title
+      titlePanel(p("E Corp Sales & Revenue Data", align = "center")),
+      # meta data
+      tags$head(
+        tags$meta(charset="UTF-8"),
+        tags$meta(name="description", content="This is an example for a dasboard showing the KPIs of sales related data."),
+        tags$meta(name="viewport", content="width=device-width, initial-scale=1.0"),
+        tags$meta(name="title", content="E Corp Sales & Revenue Data")
+      ),
+      # sidebar
+      sidebarPanel(
+        selectInput(inputId = "SalesRep", label = h5("Select Sales Rep"), 
+                     c("John" = "John",
+                       "All" = "Joh"), 
+                     selected = "John"),
+  
+        sliderInput(inputId = "DateRange", label = h5("Select Date Range"),
+                   min = as.Date("2018-01-01","%Y-%m-%d"),
+                   max = as.Date("2018-12-31","%Y-%m-%d"),
+                   value = c(as.Date("2018-01-01","%Y-%m-%d"), as.Date("2018-12-31","%Y-%m-%d")),
+                   step = 90,
+                   timeFormat="%Y-%m-%d"
+                 )
+        ), #end sidebar        
+
+        mainPanel(
+          tabsetPanel(
+            tabPanel("Revenues vs Targets", 
+                    style = "border: 4px solid silver:",
+                    fluidRow(
+                            column(width = 6,
+                            fluidRow(plotOutput("targetsplot"), style = "height:200px;padding:8px;")),
+             
+                            column(width = 6,
+                            fluidRow(verbatimTextOutput("monthly_text"), style = "height:90px;padding:26px;"),
+                            fluidRow(verbatimTextOutput("budget_text"), style = "height:400px;padding:26px;"))
+                            )
+                        ),
+            tabPanel("Countries", 
+                     style = "border: 4px solid silver:",
+                     fluidRow(
+                       column(width = 7,
+                              fluidRow(plotOutput("countries_plot"), style = "height:1px;padding:8px;")),
+                       column(width = 5,
+                              fluidRow(tableOutput("country_table"), style = "height:300px;padding:32px;"))
+                               )
+                      ),
+            
+            tabPanel("Status & Categories ", 
+                     style = "border: 4px solid silver:",
+                     fluidRow(
+                       column(width = 8,
+                              fluidRow(plotOutput("status_client_plot"), style = "height:400px;padding:8px;")),
+                       column(width = 4, 
+                              fluidRow(tableOutput("activity_table_open"), style = "height:160px;padding:1px;"),
+                              fluidRow(tableOutput("activity_table_lost"), style = "height:170px;padding:1px;"),
+                              fluidRow(verbatimTexåtOutput("closure_text"), style = "height:100px;padding:2px;"))
+                              )
+                    ),
+            tabPanel("Category/ Status Charts",
+                     style = "border: 4px solid silver:",
+                     fluidRow(
+                       column(width = 9,
+                              fluidRow(plotOutput("pie_charts"), style = "height:400px;padding:6px;")),
+                       column(width = 3, 
+                              fluidRow(tableOutput("status_table"), style = "height:140px;padding:50px;"),
+                              fluidRow(tableOutput("category_table"), style = "height:140px;padding:50px;"))
+                     )
+                     )
+            
+          ) # end tabsetpanel 
+        ) #end mainpanel
+) # end fluid page
+
+#### server ####
+# data import
+db_targets <- read.csv("https://s3.eu-central-1.amazonaws.com/shiny-electricity/db_targets.csv")
+db_revenues <- read.csv("https://s3.eu-central-1.amazonaws.com/shiny-electricity/db_revenues.csv")
+db_oppties <- read.csv("https://s3.eu-central-1.amazonaws.com/shiny-electricity/db_oppties.csv")
+
+# reformating, datatypes, cleaning up etc
+# db_oppties[,7:ncol(db_oppties)] <- NULL
+db_targets$Date <- as.Date(db_targets$Date)
+db_revenues$Date <- as.Date(db_revenues$Date)
+db_oppties$Creation.Date <- as.Date(db_oppties$Creation.Date)
+db_oppties$Close.Date <- as.Date(db_oppties$Close.Date, format = '%Y-%m-%d')
+db_revenues$Client.s.Category <- as.factor(db_revenues$Client.s.Category)
+db_revenues$Client.s.Country <- as.factor(db_revenues$Client.s.Country)
+
+# creating column for time diff for closures
+db_oppties$Close.Date.Diff <-  db_oppties$Close.Date - db_oppties$Creation.Date
+#monthly revenues
+db_revenues_monthly <- db_revenues %>% group_by(SalesRep,Month = floor_date(db_revenues$Date, "month")) %>%
+                       summarize(Total_Revenue = sum(Revenue))
+
+db_revenues_monthly_country <- data.frame(db_revenues %>% 
+                                          group_by(SalesRep,Month = floor_date(db_revenues$Date, "month"),
+                                          Client.s.Country) %>% summarize(Total_Revenue = sum(Revenue)))
+# add revenues to targets
+db_targets_revs <- cbind.fill(db_targets, db_revenues_monthly$Total_Revenue, fill = NA)
+names(db_targets_revs)[4] <- "Actual.Revenue"
+
+# monthly revenues per country
+db_revenues_monthly_country <- db_revenues %>% 
+                               group_by(SalesRep,Month = floor_date(db_revenues$Date, "month"),
+                               Client.s.Country) %>% summarize(Total_Revenue = sum(Revenue))
+
+db_oppties_monthly <- db_oppties %>% group_by(SalesRep,Month = floor_date(Creation.Date, "month")) %>%
+  summarize(Lost = length(Status[which(Status=="Lost")]),
+            Won = length(Status[which(Status=="Won")]),
+            Open = length(Status[which(Status=="Open")]),
+            "Cat A" = length(Oppty.Category[which(Oppty.Category=="A")]),
+            "Cat B" = length(Oppty.Category[which(Oppty.Category=="B")]))
+
+# melt, add categories
+db_oppties_monthly_melt_cat <- melt(db_oppties_monthly,1:2) %>%
+                                mutate(Cat = ifelse(variable == "Cat A" | variable == "Cat B","Category","Status"))
+#db_oppties_monthly_melt_cat <- db_oppties_monthly_melt %>% mutate(Cat = ifelse(variable == "Cat A" | variable == "Cat B","Category","Status"))
+db_oppties_monthly_melt_cat$Cat <- as.factor(db_oppties_monthly_melt_cat$Cat)
+# reordering factor
+db_oppties_monthly_melt_cat$variable <- reorder(db_oppties_monthly_melt_cat$variable, new.order = c("Open","Lost","Won","Cat A","Cat B"))
+
+#input$DateRange <- c("2018-01-01","2018-06-01")
+#input$SalesRep <- "John"
+
+server <- function(input, output) {
+  
+# plots -------
+  
+  output$targetsplot <- renderPlot({
+    
+    targetsplot_rev <- db_targets_revs %>% dplyr::filter(str_detect(SalesRep, input$SalesRep), between(Date, as.Date(input$DateRange[1]), as.Date(input$DateRange[2])))
+    targetsplot_data <- cbind.fill(db_targets, targetsplot_rev$Actual.Revenue, fill = NA)
+    names(targetsplot_data)[4] <- "Actual.Revenue" 
+    
+    ggplot() + geom_bar(data = targetsplot_data, stat="identity", alpha=0.75, fill = "steelblue",
+                      aes(x = factor(months(Date,abbr = T),levels = month.abb),
+                          y = Actual.Revenue, group = 1)) +
+                      geom_line(data = targetsplot_data, size = 1.5, colour = "red",
+                                aes(x = factor(months(Date,abbr = T),levels = month.abb),
+                                    y = Target.Revenue, group = 1)) + 
+                      geom_point(data = targetsplot_data, colour = "red", shape = 23, size = 3, fill="red",
+                                 aes(x = factor(months(Date,abbr = T),levels = month.abb),
+                                     y = Target.Revenue, group = 1)) + 
+                      theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+                            axis.title = element_blank(),
+                            axis.text.x = element_text(angle = 65, vjust = 0.70), axis.ticks.x=element_blank(),
+                            axis.text = element_text(size = 10)) +
+                      ggtitle(paste("Actual Revenues vs Targets, Sales Rep:", ifelse(input$SalesRep == "Joh","All", input$SalesRep)))
+      }
+    )
+  
+  # countries plot
+  output$countries_plot <- renderPlot({
+    
+   # inputDateRange <- c("2018-01-01","2018-02-01")
+   #  inputSalesRep <- "John"
+    
+    countries_plot_data <- db_revenues_monthly_country %>% dplyr::filter(str_detect(SalesRep, input$SalesRep), between(Month, as.Date(input$DateRange[1]), as.Date(input$DateRange[2])))
+    # join
+    status_countries_plot_data_aux <- left_join(db_revenues_monthly_country, countries_plot_data , by = c("SalesRep" = "SalesRep", "Month" = "Month", "Client.s.Country" = "Client.s.Country"))
+    # plot   
+    ggplot(status_countries_plot_data_aux %>% group_by(Client.s.Country) %>% summarise(Revenue = sum(Total_Revenue.y, na.rm = TRUE)), 
+         aes(reorder(Client.s.Country, Revenue, na.last=T), Revenue)) + 
+    geom_bar(stat="identity", fill ="steelblue", width = 0.65) + coord_flip() +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+          axis.text.x = element_text(vjust=0.5), axis.text = element_text(size = 11),
+          axis.title = element_blank()) +
+    scale_y_continuous( limits = c(0, ceiling(max(countries_plot_data %>% group_by(Client.s.Country) %>%
+                                                                        summarise(Revenue = sum(Total_Revenue)) %>%
+                                                                        select(Revenue))/100)*100)) +
+    ggtitle(paste("Countries by Revenue, Sales Rep:", ifelse(input$SalesRep == "Joh","All", input$SalesRep))) 
+ 
+   }) 
+ 
+  output$status_client_plot <- renderPlot({
+    
+    #   DateRange <- c("2018-01-01","2018-06-01")
+    #    x <- "John"
+    # start
+    status_client_plot_data <- db_oppties_monthly_melt_cat %>% dplyr::filter(str_detect(SalesRep, input$SalesRep), between(Month, as.Date(input$DateRange[1]), as.Date(input$DateRange[2])))
+    # join
+    status_client_plot_data_aux <- left_join(db_oppties_monthly_melt_cat, status_client_plot_data , by = c("SalesRep" = "SalesRep", "Month" = "Month", "variable" = "variable"))
+    # plot
+    ggplot(status_client_plot_data_aux, aes(y=value.y, x=Month, fill=interaction(Cat.y,variable))) +
+      geom_bar(position="dodge", stat="identity", colour="black") +
+      theme(axis.title=element_blank(),
+            legend.position = "none",
+            plot.title = element_text(hjust = 0.5),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            axis.text.x = element_text(angle = 65, vjust = 0.65),
+            axis.text = element_text(size = 10),
+    #        axis.ticks.y = element_blank(),
+            strip.text.x = element_text(size = 12)) +
+      facet_wrap(~ variable, ncol = 3) +
+     ggtitle(paste("Status & Client Category by Month, Sales Rep:", ifelse(input$SalesRep == "Joh","All", input$SalesRep))) 
+    
+  })
+  
+  output$pie_charts <- renderPlot({
+    
+#  DateRange <- c("2018-01-01","2018-06-01")
+#  x <- "John"
+    
+    status_client_plot_data <- db_oppties_monthly_melt_cat %>% dplyr::filter(str_detect(SalesRep, input$SalesRep), between(Month, as.Date(input$DateRange[1]), as.Date(input$DateRange[2])))
+    status_client_plot_data_grouped <- as.data.frame(status_client_plot_data %>% group_by("Status/Client" = variable, Category = Cat) %>% summarise(Count = sum(value)))
+    
+    status_client_plot_data_grouped_frac <- status_client_plot_data_grouped %>% group_by(Category) %>% mutate(fraction = Count/sum(Count)) %>% ungroup()
+    status_client_plot_data_grouped_frac <- status_client_plot_data_grouped_frac %>% arrange(Category, fraction) %>% group_by(Category) %>% mutate(ymax = cumsum(fraction)) %>% ungroup()
+    status_client_plot_data_grouped_frac <- status_client_plot_data_grouped_frac %>% group_by(Category) %>% mutate(ymin = c(0, head(ymax, n=-1))) %>% ungroup()
+    # renaming
+    levels(status_client_plot_data_grouped_frac$Category )[levels(status_client_plot_data_grouped_frac$Category )=="Category"] <- "Client Category"
+    
+    # plot
+    ggplot(status_client_plot_data_grouped_frac, aes(fill=`Status/Client`, ymax=ymax, ymin=ymin, xmax=4, xmin = 1.8)) +
+      geom_rect() +
+       coord_polar(theta="y") +
+      xlim(c(0, 4)) +
+      theme(panel.grid=element_blank(),axis.text=element_blank(),
+            axis.ticks=element_blank(),axis.title=element_blank(),
+            legend.position="none", strip.text.x = element_text(size = 14) ) +
+      geom_text(aes(x = 2.85, y = ymax^ 1.2  *0.75 ,
+                    label = paste0(`Status/Client`,"    \n",
+                                   round(status_client_plot_data_grouped_frac$fraction*100,1.8)," %")), size = 4.5) +
+      facet_wrap(~ Category, ncol = 2) +
+      ggtitle(paste("Overview Status & Client Category, Sales Rep:", ifelse(input$SalesRep == "Joh","All", input$SalesRep))) 
+  })
+  
+# Texts & Tables ------------
+ 
+output$monthly_text <- renderText({ 
+  
+  print(paste("Monthly Average Revenue:", round(db_revenues_monthly %>% 
+          dplyr::filter(str_detect(SalesRep, input$SalesRep), between(Month, as.Date(input$DateRange[1]), as.Date(input$DateRange[2]))) %>% 
+          group_by(SalesRep) %>% summarise(AVG_Revenue = mean(Total_Revenue)) %>% select(AVG_Revenue), 2),
+          "\nTotal Revenue:", round(db_revenues_monthly %>% 
+                                    dplyr::filter(str_detect(SalesRep, input$SalesRep), between(Month, as.Date(input$DateRange[1]), as.Date(input$DateRange[2]))) %>% 
+                                    group_by(SalesRep) %>% summarise(Total_Revenue = sum(Total_Revenue)) %>%
+                                    select(Total_Revenue),2) %>% mutate_if(is.numeric, format, big.mark = ",") %>% replace(is.null(.),0),
+          "\nMost Recent Record:", max(db_revenues$Date)
+        )
+  )
+})
+
+output$closure_text <- renderText({ 
+            # avg time diff for win to closures
+            db_oppties_daterange <- db_oppties %>% dplyr::filter(str_detect(SalesRep, input$SalesRep), between(Creation.Date, as.Date(input$DateRange[1]), as.Date(input$DateRange[2])))
+            
+            print(paste0("Avg. time between opening\nand closing an opportunity:\n",
+                  as.numeric(round(mean(db_oppties_daterange$Close.Date.Diff,na.rm=TRUE),1))," days"))
+          }) 
+
+output$budget_text <- renderText({ 
+
+        db_revenues_daterange <- db_revenues %>% dplyr::filter(str_detect(SalesRep, input$SalesRep), between(Date, as.Date(input$DateRange[1]), as.Date(input$DateRange[2])))
+
+        print(paste0("Total Revenues above/below Budget:",
+                    ifelse(sum(db_revenues_daterange$Revenue) -
+                    sum(db_targets[which(db_targets$Date == min(floor_date(db_revenues_daterange$Date, "month"))):which(db_targets$Date == max(floor_date(db_revenues_daterange$Date, "month"))),]$Target.Revenue)>0," +"," -"),
+              abs(sum(db_revenues_daterange$Revenue) -
+                sum(db_targets[which(db_targets$Date == min(floor_date(db_revenues_daterange$Date, "month"))):which(db_targets$Date == max(floor_date(db_revenues_daterange$Date, "month"))),]$Target.Revenue)),
+              "\nDate Range Chosen: ", as.Date(input$DateRange[1])," to ", as.Date(input$DateRange[2]))
+            )
+        })
+
+output$status_table <- renderTable({
+
+  #   DateRange <- c("2018-01-01","2018-06-01")
+  #    x <- "John"
+
+  status_client_plot_data <- db_oppties_monthly_melt_cat %>% dplyr::filter(str_detect(SalesRep, input$SalesRep), between(Month, as.Date(input$DateRange[1]), as.Date(input$DateRange[2])))
+  status_client_plot_data %>% dplyr::filter(Cat == "Status") %>% group_by(variable) %>% summarise(Count = sum(value)) %>% rename(Status = variable)
+  #  db_oppties_monthly_melt_cat %>% dplyr::filter(str_detect(SalesRep, input$SalesRep), between(Month, as.Date(input$DateRange[1]), as.Date(input$DateRange[2])))
+    }, hover = T, bordered = T#, spacing = c("l")
+  )
+
+output$category_table <- renderTable({
+  
+  # reordering factor
+  db_oppties_monthly_melt_cat$variable <- reorder(db_oppties_monthly_melt_cat$variable, new.order = c("Open","Lost","Won","Cat A","Cat B"))
+  status_client_plot_data <- db_oppties_monthly_melt_cat %>% dplyr::filter(str_detect(SalesRep, input$SalesRep), between(Month, as.Date(input$DateRange[1]), as.Date(input$DateRange[2])))
+  
+  status_client_plot_data %>% dplyr::filter(Cat == "Category") %>% group_by(variable) %>% summarise(Count = sum(value)) %>% rename(Category = variable)
+  
+  }, hover = T, bordered = T
+)
+
+#most active months
+output$activity_table_open <- renderTable({
+  
+ # DateRange <- c("2018-01-01","2018-06-01")
+ #  SalesRep1 <- "John"
+  
+  db_oppties_monthly_table <- db_oppties_monthly %>% dplyr::filter(str_detect(SalesRep, input$SalesRep), between(Month, as.Date(input$DateRange[1]), as.Date(input$DateRange[2])))
+  
+  db_oppties_monthly_table_Open <- db_oppties_monthly_table %>% 
+      dplyr::filter(rank(-Open, ties.method="first") <= 3) %>% select(SalesRep,Month,Open) %>% arrange(desc(Open))
+  
+  db_oppties_monthly_table_Open$Month <- as.character(as.yearmon(as.Date(db_oppties_monthly_table_Open$Month), format = "%b/%Y"))
+  db_oppties_monthly_table_Open
+
+  }, hover = T, bordered = T, 
+  caption = "<b> <span style='color:#000000'> Top 3 Months Open Opps</b>",
+  caption.placement = getOption("xtable.caption.placement", "top"), 
+  caption.width = getOption("xtable.caption.width", NULL)
+)
+
+output$activity_table_lost <- renderTable({
+  
+  # DateRange <- c("2018-01-01","2018-06-01")
+  #  SalesRep1 <- "John"
+  
+  db_oppties_monthly_table <- db_oppties_monthly %>% dplyr::filter(str_detect(SalesRep, input$SalesRep), between(Month, as.Date(input$DateRange[1]), as.Date(input$DateRange[2])))
+  db_oppties_monthly_table_Lost <- db_oppties_monthly_table %>% 
+       dplyr::filter(rank(-Lost, ties.method="first")<=3) %>% select(SalesRep, Month, Lost) %>% arrange(desc(Lost))
+  
+  db_oppties_monthly_table_Lost$Month <- as.character(as.yearmon(as.Date(db_oppties_monthly_table_Lost$Month), format = "%b/%Y"))
+  db_oppties_monthly_table_Lost
+  
+  }, hover = T, bordered = T,
+  caption = "<b> <span style='color:#000000'> Top 3 Months Lost Opps</b>",
+  caption.placement = getOption("xtable.caption.placement", "top") 
+#  caption.width = getOption("xtable.caption.width", NULL)
+)
+
+# top5 markets
+output$country_table <- renderTable({
+            db_revenues %>% 
+            group_by(Client.s.Country) %>% summarise(Top5_Markets = sum(Revenue)) %>%
+            arrange(-Top5_Markets) %>% top_n(5) %>% rename("Top 5 Countries Total" = Client.s.Country, "Total Revenue" = Top5_Markets)
+        }, hover = T, bordered = T
+     )
+
+} # closing server
+
+# starting up ShinyApp
+shinyApp(ui = ui, server = server)
