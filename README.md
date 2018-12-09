@@ -16,4 +16,4 @@ https://jschoenau.shinyapps.io/energy_advanced_app2/
 
 Preview:
 <kbd>
-![energy shiny app preview](https://github.com/jorgschonau/shiny/blob/master/images/preview_energy_shinyapp.png)</kbd>
+[![energy shiny app preview](https://github.com/jorgschonau/shiny/blob/master/images/preview_energy_shinyapp.png)](https://jschoenau.shinyapps.io/energy_advanced_app2/)</kbd>
