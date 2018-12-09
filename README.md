@@ -9,8 +9,7 @@ https://jschoenau.shinyapps.io/Kantox_Dashboard/
 
 Preview:
 <kbd>
-[![ecorp shiny app preview](https://github.com/jorgschonau/shiny/blob/master/images/ecorp_screenshot.png)]https://jschoenau.shinyapps.io/Kantox_Dashboard/</kbd>
-
+[![ecorp shiny app preview](https://github.com/jorgschonau/shiny/blob/master/images/ecorp_screenshot.png)](https://jschoenau.shinyapps.io/Kantox_Dashboard/)</kbd>
 
 2. Overview of energy consumed in a household over several years:
 https://jschoenau.shinyapps.io/energy_advanced_app2/
