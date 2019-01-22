@@ -4,4 +4,4 @@ A dashboard showing the sales amounts and revenues of several sales reps of an i
 
 Here's a preview:
 
-![energy shiny app preview](https://github.com/jorgschonau/shiny/blob/master/images/preview_energy_shinyapp.png)
+![energy shiny app preview](https://github.com/jorgschonau/shiny/blob/master/images/ecorp_screenshot.png)
